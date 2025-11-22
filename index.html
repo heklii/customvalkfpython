@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VALORANT Killfeed Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-[#0a0e17] text-gray-100 p-4 md:p-8 font-sans min-h-screen flex flex-col overflow-y-auto">
+
+    <header class="mb-6 text-center shrink-0">
+        <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
+            VALORANT KILLFEED EDITOR
+        </h1>
+        <p class="text-gray-400 text-sm">Drag & Drop • Undo/Redo • High Res Export</p>
+    </header>
+
+    <div class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+        
+        <div class="lg:col-span-7 bg-[#0a0e17] border border-gray-800 rounded-xl relative shadow-2xl flex flex-col min-h-[600px] overflow-hidden">
+            
+            <div id="preview-area-bg" class="flex-grow flex items-center justify-center overflow-auto p-12 cursor-default relative bg-[#00ff00]">
+                
+                <div id="capture-area-wrapper">
+                    <div id="killfeed-container"></div>
+                </div>
+
+            </div>
+            
+            <div class="p-3 bg-slate-900/80 border-t border-gray-800 text-xs text-gray-500 text-center shrink-0 z-20">
+                Tip: Use <strong>Win+Shift+S</strong> (Windows) or <strong>Cmd+Shift+4</strong> (Mac) to screenshot.
+            </div>
+        </div>
+
+        <div id="control-panel-container" class="lg:col-span-5 flex flex-col gap-4">
+            
+            <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden shrink-0">
+                <div class="bg-slate-900/50 p-3 border-b border-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-800 transition-colors" onclick="document.getElementById('style-settings-content').classList.toggle('hidden')">
+                    <h3 class="font-bold text-gray-300 text-center text-sm uppercase tracking-wider">🎨 Appearance & Presets</h3>
+                    <span class="text-xs text-gray-500">▼</span>
+                </div>
+                <div id="style-settings-content" class="p-4 space-y-4 text-sm border-b border-slate-700">
+                    
+                    <div class="flex gap-2 mb-4">
+                        <button id="preset-default" class="flex-1 bg-slate-700 hover:bg-slate-600 py-1 rounded text-xs text-white transition-colors">Default</button>
+                        <button id="preset-val-ally" class="flex-1 bg-cyan-900/80 hover:bg-cyan-800 py-1 rounded text-xs text-cyan-100 border border-cyan-500 transition-colors">Val Ally</button>
+                        <button id="preset-val-enemy" class="flex-1 bg-red-900/80 hover:bg-red-800 py-1 rounded text-xs text-red-100 border border-red-500 transition-colors">Val Enemy</button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Width (px)</label>
+                            <input type="number" id="style-width" value="500" class="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Height (px)</label>
+                            <input type="number" id="style-height" value="36" class="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1">
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-slate-700">
+                        <div class="flex justify-between items-center">
+                            <label class="block text-xs text-gray-300 font-bold">Gradient Border</label>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] text-gray-500">Angle:</span>
+                                <input type="number" id="style-border-angle" value="180" class="w-12 bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-xs text-center">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Start Color</label>
+                                <input type="color" id="style-border-start" value="#8e00e7" class="w-full h-8 bg-slate-900 border-0 rounded cursor-pointer px-1 py-0.5">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">End Color</label>
+                                <input type="color" id="style-border-end" value="#420067" class="w-full h-8 bg-slate-900 border-0 rounded cursor-pointer px-1 py-0.5">
+                            </div>
+                        </div>
+                        <div>
+                             <label class="block text-xs text-gray-400 mb-1">Border Thickness</label>
+                             <input type="range" id="style-border-width" min="0" max="10" value="2" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-slate-700">
+                        <div class="flex justify-between items-center">
+                            <label class="block text-xs text-gray-300 font-bold">Glow Effect</label>
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="style-glow-enabled" checked class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-purple-600 focus:ring-purple-500">
+                                <label for="style-glow-enabled" class="text-xs text-gray-400 select-none cursor-pointer">Enable</label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                             <div>
+                                <label class="block text-xs text-gray-400 mb-1">Glow Color</label>
+                                <input type="color" id="style-glow-color" value="#8e00e7" class="w-full h-8 bg-slate-900 border-0 rounded cursor-pointer px-1 py-0.5">
+                            </div>
+                             <div>
+                                <label class="block text-xs text-gray-400 mb-1">Intensity</label>
+                                <input type="range" id="style-glow-intensity" min="1" max="30" value="10" class="w-full h-8 bg-transparent cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-2 pt-2 border-t border-slate-700">
+                        <label class="block text-xs text-gray-300 font-bold">Colors & Background</label>
+                        
+                        <div class="grid grid-cols-2 gap-3 mb-2">
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Feed Background</label>
+                                <div class="flex gap-1">
+                                    <input type="color" id="style-bg-color" value="#000000" class="h-8 w-8 bg-transparent cursor-pointer rounded">
+                                    <input type="range" id="style-bg-opacity" min="0" max="100" value="100" class="flex-grow h-8" title="Opacity">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Multikill Dash</label>
+                                <input type="color" id="style-dash-color" value="#8e00e7" class="w-full h-8 bg-slate-900 border-0 rounded cursor-pointer px-1 py-0.5">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2">
+                             <div>
+                                <label class="block text-xs text-gray-400 mb-1">Attacker Name</label>
+                                <input type="color" id="style-attacker-color" value="#ffffff" class="w-full h-8 bg-slate-900 border-0 rounded cursor-pointer px-1 py-0.5">
+                            </div>
+                             <div>
+                                <label class="block text-xs text-gray-400 mb-1">Icon Color</label>
+                                <input type="color" id="style-icon-color" value="#ffffff" class="w-full h-8 bg-slate-900 border-0 rounded cursor-pointer px-1 py-0.5">
+                            </div>
+                             <div>
+                                <label class="block text-xs text-gray-400 mb-1">Victim Name</label>
+                                <input type="color" id="style-victim-color" value="#ffffff" class="w-full h-8 bg-slate-900 border-0 rounded cursor-pointer px-1 py-0.5">
+                            </div>
+                        </div>
+
+                        <div class="pt-2 space-y-2">
+                            <label class="block text-xs text-gray-400 mb-1">Custom Background Image</label>
+                            <input type="file" id="style-bg-image-input" accept="image/*" class="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700">
+                            
+                            <div class="space-y-3 pt-2">
+                                <div>
+                                    <div class="flex justify-between mb-1">
+                                        <label class="text-[10px] text-gray-500">Position X</label>
+                                        <span class="text-[10px] text-gray-500" id="display-pos-x">50%</span>
+                                    </div>
+                                    <input type="range" id="style-bg-pos-x" min="0" max="100" value="50" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                                </div>
+                                <div>
+                                    <div class="flex justify-between mb-1">
+                                        <label class="text-[10px] text-gray-500">Position Y</label>
+                                        <span class="text-[10px] text-gray-500" id="display-pos-y">50%</span>
+                                    </div>
+                                    <input type="range" id="style-bg-pos-y" min="0" max="100" value="50" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                                </div>
+                                <div>
+                                    <div class="flex justify-between mb-1">
+                                        <label class="text-[10px] text-gray-500">Scale</label>
+                                        <span class="text-[10px] text-gray-500" id="display-scale">100%</span>
+                                    </div>
+                                    <input type="range" id="style-bg-size" min="10" max="500" value="100" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end mt-1">
+                                <button id="clear-bg-image-btn" class="text-[10px] text-red-400 hover:text-red-300 hidden">Remove Image</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden shrink-0">
+                <div class="bg-slate-900/50 p-3 border-b border-slate-700">
+                    <h3 class="font-bold text-purple-400 text-center" id="panel-title">Add New Kill</h3>
+                </div>
+                <div class="p-4 space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Attacker Name</label>
+                            <input type="text" id="attacker-name" value="hekli" 
+                                   class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 outline-none text-white transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Attacker Agent</label>
+                            <select id="attacker-agent" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 outline-none text-white transition-colors"></select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Weapon / Ability</label>
+                            <select id="weapon" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 outline-none text-white transition-colors"></select>
+                        </div>
+                         <div>
+                            <label class="block text-xs text-gray-400 mb-1">Multikill</label>
+                            <select id="multikill-count" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 outline-none text-white transition-colors">
+                                <option value="1">None (1x)</option>
+                                <option value="2">Double (2x)</option>
+                                <option value="3">Triple (3x)</option>
+                                <option value="4">Quadra (4x)</option>
+                                <option value="5">Ace (5x)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-2">Modifiers</label>
+                        <div id="kill-type-container" class="flex flex-wrap gap-3 bg-slate-900/50 p-3 rounded border border-slate-700"></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Victim Name</label>
+                            <input type="text" id="victim-name" value="verylongsonglyric" 
+                                   class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 outline-none text-white transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Victim Agent</label>
+                            <select id="victim-agent" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 outline-none text-white transition-colors"></select>
+                        </div>
+                    </div>
+                    <div class="pt-4 border-t border-slate-700 flex gap-2 items-end">
+                         <div class="flex-grow">
+                            <label class="block text-xs text-gray-400 mb-1">Separator Text</label>
+                            <input type="text" id="separator-text" placeholder="ROUND 1" 
+                                   class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 outline-none text-white transition-colors">
+                         </div>
+                         <button id="add-separator-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white py-2 px-4 rounded font-bold text-sm transition-all h-[38px] shadow-lg">
+                            + Separator
+                         </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="space-y-3 shrink-0 pb-8">
+                <div id="add-controls">
+                    <button id="add-kill-btn" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white py-3 rounded-lg shadow-lg font-bold flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02]">
+                        Add Kill Entry
+                    </button>
+                </div>
+                <div id="edit-controls" class="hidden flex gap-2">
+                     <button id="update-kill-btn" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg shadow-lg font-bold transition-all">Update</button>
+                    <button id="cancel-edit-btn" class="flex-1 bg-slate-600 hover:bg-slate-500 text-white py-3 rounded-lg shadow-lg font-bold transition-all">Cancel</button>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                     <button id="undo-btn" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 rounded shadow transition-colors">Undo</button>
+                    <button id="clear-feed-btn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded shadow transition-colors">Clear All</button>
+                    <button id="download-png-btn" class="bg-slate-700 text-gray-400 font-bold py-2 rounded shadow cursor-not-allowed opacity-70">Download PNG (WIP)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <template id="kill-entry-template">
+        <div class="kill-row" draggable="true">
+            <div class="multikill-column"></div> 
+            <div class="kill-entry">
+                <div class="kill-entry-inner">
+                    <div class="attacker-info">
+                        <img class="agent-icon attacker" src="" alt="Attacker">
+                        <span class="name attacker-name"></span>
+                    </div>
+                    <div class="kill-info">
+                        <img class="weapon-icon" src="" alt="Weapon">
+                        <div class="kill-type-icons"></div> 
+                    </div>
+                    <div class="victim-info">
+                        <span class="name victim-name"></span>
+                        <img class="agent-icon victim" src="" alt="Victim">
+                    </div>
+                </div>
+                <span class="separator-text"></span>
+            </div>
+        </div>
+    </template>
+
+    <script src="script.js"></script>
+</body>
+</html>

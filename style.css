@@ -1,0 +1,260 @@
+@font-face {
+    font-family: 'Moonbeam';
+    src: url('assets/fonts/Moonbeam.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+.hidden { display: none !important; }
+
+/* Main UI background (Dark) */
+body {
+    background-color: #0a0e17 !important; 
+}
+
+/* --- Green Screen Area --- */
+.green-screen-bg {
+    background-color: #00ff00 !important; /* Pure Green for Chroma Key */
+    background-image: none !important;    /* Remove any patterns */
+}
+
+/* --- Variables --- */
+:root {
+    --kf-width: 500px;
+    --kf-height: 36px;
+    
+    /* Box Background */
+    --kf-bg-color: rgba(0, 0, 0, 1);
+    --kf-bg-image: none; 
+    --kf-bg-pos-x: 50%;
+    --kf-bg-pos-y: 50%;
+    --kf-bg-size: 100%;
+    
+    /* Gradient Border Settings */
+    --kf-border-angle: 180deg;
+    --kf-border-start: #8e00e7;
+    --kf-border-end: #420067;
+    --kf-border-width: 2px;
+    
+    /* Glow */
+    --kf-shadow-color: rgba(139, 0, 255, 0.4);
+    --kf-shadow-size: 10px;
+    --kf-shadow: 0 0 var(--kf-shadow-size) var(--kf-shadow-color);
+
+    /* Dash */
+    --kf-dash-color: #8e00e7;
+    
+    /* Colors */
+    --kf-attacker-color: #ffffff;
+    --kf-victim-color: #ffffff;
+    --kf-icon-color: #ffffff;
+}
+
+/* --- Capture Wrapper --- */
+#capture-area-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; 
+    padding: 20px; 
+    box-sizing: content-box;
+    background-color: transparent;
+    
+    /* Scale up for better visibility */
+    transform: scale(1.25);
+    transform-origin: center top;
+}
+
+#killfeed-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1px; 
+    align-items: flex-end;
+}
+
+/* --- Row Wrapper --- */
+.kill-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    cursor: move;
+    transition: opacity 0.2s;
+}
+
+.kill-row.dragging { opacity: 0.5; }
+
+/* --- Multikill Dashes --- */
+.multikill-column {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    padding-right: 6px;
+    min-width: 10px;
+}
+
+.multikill-dash {
+    width: 4px;
+    height: 4px;
+    background-color: var(--kf-dash-color);
+    border-radius: 1px;
+    margin: 1px 0;
+    box-shadow: 0 0 4px var(--kf-dash-color);
+}
+
+/* --- Kill Entry Bar --- */
+.kill-entry {
+    display: flex;
+    position: relative;
+    box-sizing: border-box;
+    
+    width: var(--kf-width);
+    height: var(--kf-height);
+    
+    background-image: linear-gradient(var(--kf-border-angle), var(--kf-border-start), var(--kf-border-end));
+    
+    padding: var(--kf-border-width); 
+    
+    box-shadow: var(--kf-shadow);
+    overflow: hidden; 
+    flex-shrink: 0; 
+}
+
+.kill-entry-inner {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    
+    background-color: var(--kf-bg-color);
+    background-image: var(--kf-bg-image);
+    background-position: var(--kf-bg-pos-x) var(--kf-bg-pos-y);
+    background-size: var(--kf-bg-size);
+    background-repeat: no-repeat;
+    
+    padding: 0 4px; 
+}
+
+.kill-row.selected .kill-entry {
+    background-image: none;
+    background-color: #ffffff;
+}
+
+/* --- Separator --- */
+.kill-row.separator .kill-entry {
+    background: rgba(0, 0, 0, 0.5); 
+    padding: 0; 
+    box-shadow: none;
+}
+
+.kill-row.separator .kill-entry-inner {
+    background: transparent;
+    justify-content: center;
+}
+
+.kill-row.separator .kill-entry-inner > *:not(.separator-text) { display: none; }
+
+.separator-text {
+    display: none; 
+    font-family: 'Moonbeam', sans-serif; 
+    color: #ffffff; 
+    font-size: 22px; 
+    font-weight: normal; 
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1; 
+    pointer-events: none;
+}
+.kill-row.separator .separator-text { display: block; }
+
+/* --- Layout Groups --- */
+.attacker-info {
+    display: flex;
+    align-items: center;
+    flex: 0.5; 
+    min-width: 0; 
+    justify-content: flex-end; 
+}
+
+.victim-info {
+    display: flex;
+    align-items: center;
+    flex: 1.5; 
+    min-width: 0; 
+    overflow: hidden;
+    justify-content: flex-start; 
+}
+
+.kill-info {
+    flex-shrink: 0;
+    margin: 0 4px;
+    display: flex;
+    align-items: center;
+}
+
+/* --- Agent Icons --- */
+.kill-entry .agent-icon {
+    height: 28px; 
+    width: 56px; 
+    object-fit: fill; 
+    flex-shrink: 0;
+    image-rendering: crisp-edges;
+    pointer-events: none; 
+}
+.attacker-info .agent-icon { margin-right: 6px; }
+.victim-info .agent-icon { margin-left: auto; transform: scaleX(-1); } 
+
+/* --- Text --- */
+.kill-entry .name {
+    font-family: 'Moonbeam', sans-serif; 
+    font-size: 22px; 
+    font-weight: normal; 
+    white-space: nowrap;
+    text-overflow: clip;
+    line-height: 1; 
+    pointer-events: none; 
+    display: block;
+    text-rendering: geometricPrecision; 
+}
+
+.attacker-info .attacker-name {
+    margin-right: 4px;
+    text-align: center;
+    flex-grow: 1;
+    overflow: visible; 
+    color: var(--kf-attacker-color);
+}
+
+.victim-info .victim-name {
+    margin-left: 4px; 
+    flex-grow: 1; 
+    text-align: center; 
+    width: 100%; 
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--kf-victim-color);
+}
+
+/* --- Icons --- */
+.kill-info .weapon-icon {
+    height: 19px; 
+    width: auto; 
+    filter: brightness(0) drop-shadow(0 100px 0 var(--kf-icon-color)); 
+    image-rendering: pixelated; 
+    transform: translateY(-100px) scaleX(-1); 
+    pointer-events: none; 
+    margin-right: 2px;
+}
+
+.kill-type-icons { display: flex; align-items: center; }
+
+.kill-type-icons .kill-type-icon {
+    height: 15px; 
+    width: auto;
+    margin: 0 1px; 
+    filter: brightness(0) drop-shadow(0 100px 0 var(--kf-icon-color));
+    flex-shrink: 0;
+    image-rendering: pixelated;
+    pointer-events: none; 
+    transform: translateY(-100px);
+}
