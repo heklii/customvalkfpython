@@ -2,7 +2,6 @@ import sys
 import os
 import copy
 import json
-import glob
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageTk, ImageOps
 import customtkinter as ctk
 from tkinter import filedialog, messagebox, colorchooser
@@ -21,8 +20,10 @@ ctk.set_default_color_theme("dark-blue")
 # Path Setup
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSET_PATH = os.path.join(BASE_DIR, "assets", "ShooterGame")
-DEFAULT_FONT_PATH = os.path.join(BASE_DIR, "assets", "fonts", "Moonbeam.ttf")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+
+# --- FIX: Correct Variable Name Definition ---
+DEFAULT_FONT_PATH = os.path.join(BASE_DIR, "assets", "fonts", "Moonbeam.ttf")
 
 # --- Mappings ---
 AGENT_ICONS = {
@@ -103,7 +104,6 @@ class KillfeedRenderer:
         except: return Image.new("RGBA", (10,10), (0,0,0,0))
 
     def render(self, entries, global_s, scale=1.0):
-        # Use row height from global settings
         row_h = int(global_s['height'] * scale)
         spacing = int(global_s.get('row_spacing', 2) * scale)
         safe_padding = int(60 * scale)
@@ -124,16 +124,13 @@ class KillfeedRenderer:
 
         y = safe_padding
         
-        # Font Logic
         font_path = global_s.get('font_path', DEFAULT_FONT_PATH)
         base_size = global_s.get('font_size', 22)
         font = self.get_font(font_path, int(base_size * scale))
         
         for entry in entries:
-            # Check for per-row override
             row_settings = global_s
             if entry.get('override_style', False):
-                # Merge override settings on top of global
                 row_settings = global_s.copy()
                 row_settings.update(entry.get('style', {}))
                 
@@ -265,9 +262,6 @@ class KillfeedRenderer:
             aw, ah = ab[2]-ab[0], ab[3]-ab[1]
             vw, vh = vb[2]-vb[0], vb[3]-vb[1]
             
-            # Vertical Centering logic (Same for both)
-            # Default is center of height (cy) minus half text height.
-            # Offsets allow manual tweaking.
             ay_off = int(s.get('att_offset_y', -4) * scale)
             vy_off = int(s.get('vic_offset_y', -4) * scale)
             
@@ -458,9 +452,7 @@ class KillfeedApp(ctk.CTk):
         self.chk_override = ctk.CTkCheckBox(p, text="Override Style (Enable Individual Edit)", command=self.toggle_override)
         self.chk_override.pack(pady=5)
         
-        # Per-Row Style Controls (Hidden by default)
         self.f_override = ctk.CTkFrame(p); 
-        # Add some mini controls for per-row edit
         self.btn_row_bg = ctk.CTkButton(self.f_override, text="Set Row BG", width=80, command=lambda: self.pick_row_color('bg_color'))
         self.btn_row_bg.pack(side="left", padx=2)
         
@@ -481,9 +473,6 @@ class KillfeedApp(ctk.CTk):
             self.f_override.pack_forget()
 
     def pick_row_color(self, key):
-        # Simple helper to set a style key on the currently editing row's temp data
-        # For full implementation we'd need a whole parallel UI. 
-        # Simplified: just saves current global settings as the override when updated.
         pass 
 
     def setup_autocomplete(self, widget, data_source):
@@ -508,6 +497,12 @@ class KillfeedApp(ctk.CTk):
             val = values[new_idx]
             self.cmb_font.set(val)
             self.on_font_select(val)
+    
+    def on_font_select(self, font_name):
+        path = self.system_fonts.get(font_name)
+        if path:
+            self.settings['font_path'] = path
+            self.update_preview()
 
     def build_style(self, p):
         sf = ctk.CTkScrollableFrame(p, fg_color="transparent"); sf.pack(fill="both", expand=True)
@@ -550,7 +545,6 @@ class KillfeedApp(ctk.CTk):
             btn.configure(command=pick); btn.pack(side="left"); self.style_vars[key] = btn
         
         ctk.CTkLabel(sf, text="Dim/BG", text_color="gray").pack(anchor="w"); add_ctrl("Width", 'width', 300, 800); add_ctrl("Height", 'height', 20, 60); add_ctrl("Opacity", 'bg_opacity', 0, 100); add_col("BG Col", 'bg_color')
-        
         ctk.CTkLabel(sf, text="Custom Image Settings", text_color="gray", font=("Arial", 11)).pack(anchor="w", pady=(5,0))
         add_ctrl("Scale", 'bg_scale', 10, 200)
         add_ctrl("Padding", 'bg_padding', 0, 50)
@@ -560,19 +554,15 @@ class KillfeedApp(ctk.CTk):
         ctk.CTkButton(ip, text="Select Img", width=80, command=self.pick_bg).pack(side="left")
         ctk.CTkButton(ip, text="Clear", width=50, fg_color="#b91c1c", command=self.clear_bg).pack(side="left", padx=5)
 
-        # Font Settings
         ctk.CTkLabel(sf, text="Font Settings", text_color="gray", font=("Arial", 11)).pack(anchor="w", pady=(5,0))
         f_sel = ctk.CTkFrame(sf, fg_color="transparent"); f_sel.pack(fill="x", pady=2)
-        
-        add_ctrl("Size", 'font_size', 10, 40) # NEW FONT SIZE SLIDER
-        
+        add_ctrl("Size", 'font_size', 10, 40)
         sorted_fonts = sorted(self.system_fonts.keys())
         self.cmb_font = ctk.CTkComboBox(f_sel, values=sorted_fonts, command=self.on_font_select)
         self.cmb_font.pack(side="left", fill="x", expand=True)
         self.cmb_font.bind("<MouseWheel>", self.on_font_scroll)
         self.cmb_font.bind("<Button-4>", self.on_font_scroll)
         self.cmb_font.bind("<Button-5>", self.on_font_scroll)
-        
         fp = ctk.CTkFrame(sf, fg_color="transparent"); fp.pack(fill="x")
         ctk.CTkButton(fp, text="Browse...", width=80, command=self.pick_font).pack(side="left")
         ctk.CTkButton(fp, text="Reset", width=50, fg_color="#b91c1c", command=self.reset_font).pack(side="left", padx=5)
@@ -581,13 +571,11 @@ class KillfeedApp(ctk.CTk):
         ctk.CTkLabel(sf, text="Borders", text_color="gray").pack(anchor="w"); add_col("Start", 'border_start'); add_col("End", 'border_end'); add_col("Dash", 'dash_color')
         ctk.CTkLabel(sf, text="Text", text_color="gray").pack(anchor="w"); add_col("Attacker", 'att_color'); add_col("Victim", 'vic_color'); add_col("Icon", 'icon_color')
 
-        # EXPORT SETTINGS
         ctk.CTkLabel(sf, text="EXPORT SETTINGS", text_color="#a855f7", font=("Arial", 12, "bold")).pack(anchor="w", pady=(15,0))
         bg_modes = ["Transparent", "Solid Color", "Match Gradient"]
         self.opt_bg_mode = ctk.CTkOptionMenu(sf, values=bg_modes, command=lambda v: self.set_val('export_bg_mode', v))
         self.opt_bg_mode.set(self.settings['export_bg_mode'])
         self.opt_bg_mode.pack(fill="x", pady=2)
-        
         self.btn_bg_col = ctk.CTkButton(sf, text="Set Background Color", fg_color=rgb_to_hex(self.settings['export_bg_color']))
         def pick_ex_bg():
             def upd(c):
@@ -599,7 +587,8 @@ class KillfeedApp(ctk.CTk):
                         self.settings['export_bg_color'] = tuple(int(x) for x in c[:3])
                         self.btn_bg_col.configure(fg_color=rgb_to_hex(self.settings['export_bg_color']))
                     self.update_preview()
-            upd(colorchooser.askcolor(color=rgb_to_hex(self.settings['export_bg_color']))[1])
+            if HAS_MODERN_PICKER: AskColor(color=rgb_to_hex(self.settings['export_bg_color']), command=upd)
+            else: upd(colorchooser.askcolor(color=rgb_to_hex(self.settings['export_bg_color']))[1])
         self.btn_bg_col.configure(command=pick_ex_bg)
         self.btn_bg_col.pack(fill="x", pady=2)
         self.style_vars['export_bg_color'] = self.btn_bg_col
@@ -607,7 +596,6 @@ class KillfeedApp(ctk.CTk):
 
     def build_layout(self, p):
         sf = ctk.CTkScrollableFrame(p, fg_color="transparent"); sf.pack(fill="both", expand=True)
-        self.layout_vars = {}
         def add_l(parent, lbl, key, mn, mx):
             f = ctk.CTkFrame(parent, fg_color="transparent"); f.pack(fill="x", pady=2)
             ctk.CTkLabel(f, text=lbl, width=80, anchor="w").pack(side="left")
@@ -740,12 +728,6 @@ class KillfeedApp(ctk.CTk):
         f = filedialog.askopenfilename(filetypes=[("Font Files", "*.ttf;*.otf")])
         if f: 
             self.settings['font_path'] = f
-            self.update_preview()
-            
-    def on_font_select(self, font_name):
-        path = self.system_fonts.get(font_name)
-        if path:
-            self.settings['font_path'] = path
             self.update_preview()
 
     def reset_font(self):
