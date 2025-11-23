@@ -5,6 +5,13 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageTk, ImageOps
 import customtkinter as ctk
 from tkinter import filedialog, messagebox, colorchooser
 
+# --- Optional: Modern Color Picker ---
+try:
+    from CTkColorPicker import AskColor
+    HAS_MODERN_PICKER = True
+except ImportError:
+    HAS_MODERN_PICKER = False
+
 # --- Configuration ---
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
@@ -12,7 +19,7 @@ ctk.set_default_color_theme("dark-blue")
 # Path Setup
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSET_PATH = os.path.join(BASE_DIR, "assets", "ShooterGame")
-FONT_PATH = os.path.join(BASE_DIR, "assets", "fonts", "Moonbeam.ttf")
+DEFAULT_FONT_PATH = os.path.join(BASE_DIR, "assets", "fonts", "Moonbeam.ttf")
 
 # --- Mappings ---
 AGENT_ICONS = {
@@ -42,11 +49,11 @@ WEAPON_ICONS = {
 
 # --- Helpers ---
 def hex_to_rgb(hex_col):
+    if not hex_col: return (255, 255, 255)
     h = hex_col.lstrip('#')
     return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
 def rgb_to_hex(rgb):
-    # Ensures integer tuple for hex conversion
     safe_rgb = tuple(int(c) for c in rgb[:3])
     return '#%02x%02x%02x' % safe_rgb
 
@@ -75,9 +82,9 @@ class KillfeedRenderer:
         self.cache = {}
         self.base_font_size = 22
 
-    def get_font(self, scale):
+    def get_font(self, path, scale):
         size = int(self.base_font_size * scale)
-        try: return ImageFont.truetype(FONT_PATH, size)
+        try: return ImageFont.truetype(path, size)
         except: return ImageFont.load_default()
 
     def get_image(self, name, folder_scan=True):
@@ -95,21 +102,35 @@ class KillfeedRenderer:
 
     def render(self, entries, s, scale=1.0):
         row_h = int(s['height'] * scale)
-        spacing = int(2 * scale)
+        spacing = int(s.get('row_spacing', 2) * scale)
         safe_padding = int(60 * scale)
         
         total_h = max(int(100*scale), len(entries) * (row_h + spacing) + (safe_padding * 2))
         canvas_w = int(s['width'] * scale) + (safe_padding * 2)
         
-        canvas = Image.new('RGBA', (canvas_w, total_h), (0,0,0,0))
+        bg_mode = s.get('export_bg_mode', 'Transparent')
+        if bg_mode == 'Solid Color':
+            col = tuple(int(c) for c in s.get('export_bg_color', (0,0,0))[:3])
+            canvas = Image.new('RGBA', (canvas_w, total_h), col + (255,))
+        elif bg_mode == 'Match Gradient':
+            b_start = tuple(int(c) for c in s['border_start'][:3])
+            b_end = tuple(int(c) for c in s['border_end'][:3])
+            canvas = create_gradient(canvas_w, total_h, b_start, b_end, s['border_angle'])
+        else:
+            canvas = Image.new('RGBA', (canvas_w, total_h), (0,0,0,0))
+
         y = safe_padding
-        
-        font = self.get_font(scale)
+        font_path = s.get('font_path', DEFAULT_FONT_PATH)
+        font = self.get_font(font_path, scale)
         
         for entry in entries:
             row_img = self.render_row(entry, s, scale, font, safe_padding)
             x = (canvas_w - row_img.width) // 2
-            canvas.paste(row_img, (x, y), row_img)
+            
+            if bg_mode == 'Transparent':
+                canvas.paste(row_img, (x, y), row_img)
+            else:
+                canvas.alpha_composite(row_img, (x, y))
             y += row_h + spacing
             
         return canvas
@@ -121,10 +142,8 @@ class KillfeedRenderer:
         c_w = w + (padding * 2)
         c_h = h + (padding * 2)
         container = Image.new('RGBA', (c_w, c_h), (0,0,0,0))
-        
         bx, by = padding, padding
         
-        # 1. Glow
         if s['glow_enabled']:
             intensity = s['glow_intensity'] * scale
             glow_color = tuple(int(c) for c in s['glow_color'][:3])
@@ -137,13 +156,11 @@ class KillfeedRenderer:
             container = Image.alpha_composite(container, la)
             container = Image.alpha_composite(container, lb)
 
-        # 2. Border
         b_start = tuple(int(c) for c in s['border_start'][:3])
         b_end = tuple(int(c) for c in s['border_end'][:3])
         grad = create_gradient(w, h, b_start, b_end, s['border_angle'])
         container.paste(grad, (bx, by), grad)
         
-        # 3. BG
         bw = int(s['border_width'] * scale)
         iw = w - (bw * 2)
         ih = h - (bw * 2)
@@ -170,7 +187,6 @@ class KillfeedRenderer:
             
         container.paste(inner_bg, (bx+bw, by+bw), inner_bg)
         
-        # 4. Content
         content = Image.new('RGBA', (iw, ih), (0,0,0,0))
         cd = ImageDraw.Draw(content)
         cy = ih // 2
@@ -182,7 +198,6 @@ class KillfeedRenderer:
         else:
             icon_w, icon_h = int(56 * scale), int(28 * scale)
             
-            # Icons
             att_icon = self.get_image(entry['att_agent']).resize((icon_w, icon_h), Image.Resampling.NEAREST)
             content.paste(att_icon, (0, cy - (icon_h // 2)), att_icon)
             
@@ -192,11 +207,19 @@ class KillfeedRenderer:
             wep_base = self.get_image(entry['weapon'])
             icon_tint = tuple(int(c) for c in s['icon_color'][:3])
             
+            wep_w, wep_h = 0, 0
+            wep_icon = None
+            
             if wep_base.width > 0:
-                wh = int(19 * scale)
-                ww = int(wh * (wep_base.width / wep_base.height))
-                wep_icon = colorize_image(ImageOps.mirror(wep_base.resize((ww, wh), Image.Resampling.NEAREST)), icon_tint)
-            else: ww, wh, wep_icon = 0, 0, None
+                wep_h = int(19 * scale)
+                wep_w = int(wep_h * (wep_base.width / wep_base.height))
+                wep_icon = colorize_image(ImageOps.mirror(wep_base.resize((wep_w, wep_h), Image.Resampling.NEAREST)), icon_tint)
+            
+            center_x = (iw // 2) + int(s.get('center_offset', 0) * scale)
+            wep_draw_x = center_x - (wep_w // 2)
+            
+            if wep_icon:
+                content.paste(wep_icon, (wep_draw_x, cy - (wep_h // 2)), wep_icon)
             
             mods = []
             m_h = int(15 * scale)
@@ -209,16 +232,12 @@ class KillfeedRenderer:
                         mods.append(colorize_image(mi.resize((mw, m_h), Image.Resampling.NEAREST), icon_tint))
 
             mod_sp = int(s.get('mod_spacing', 2) * scale)
-            cw = ww + sum([m.width + mod_sp for m in mods])
-            cx = (iw // 2) - (cw // 2) + int(s.get('center_offset', 0) * scale)
+            mx = wep_draw_x + wep_w + mod_sp
             
-            if wep_icon: content.paste(wep_icon, (cx, cy - (wh // 2)), wep_icon)
-            mx = cx + ww + mod_sp
             for m_img in mods:
                 content.paste(m_img, (mx, cy - (m_h // 2)), m_img)
                 mx += m_img.width + mod_sp
             
-            # Text
             atxt, vtxt = entry['att_name'], entry['vic_name']
             ab, vb = font.getbbox(atxt), font.getbbox(vtxt)
             aw, ah = ab[2]-ab[0], ab[3]-ab[1]
@@ -231,15 +250,16 @@ class KillfeedRenderer:
             vc = tuple(int(c) for c in s['vic_color'][:3])
             
             aa, ax_off = s.get('att_align', 'Left'), int(s.get('att_offset_x', 8) * scale)
-            if aa == 'Right': ax = cx - aw - ax_off
+            if aa == 'Right': ax = wep_draw_x - aw - ax_off
             elif aa == 'Left': ax = icon_w + ax_off
-            else: ax = icon_w + ((cx - icon_w)//2) - (aw//2) + ax_off
+            else: ax = icon_w + ((wep_draw_x - icon_w)//2) - (aw//2) + ax_off
             cd.text((ax, cy - (ah//2) + ay_off), atxt, font=font, fill=ac)
             
+            cluster_right_edge = mx
             va, vx_off = s.get('vic_align', 'Center'), int(s.get('vic_offset_x', 0) * scale)
-            if va == 'Left': vx = mx + vx_off
+            if va == 'Left': vx = cluster_right_edge + vx_off
             elif va == 'Right': vx = (iw - icon_w) - vw - vx_off
-            else: vx = mx + (((iw - icon_w) - mx)//2) - (vw//2) + vx_off
+            else: vx = cluster_right_edge + (((iw - icon_w) - cluster_right_edge)//2) - (vw//2) + vx_off
             cd.text((vx, cy - (vh//2) + vy_off), vtxt, font=font, fill=vc)
 
         container.paste(content, (bx+bw, by+bw), content)
@@ -267,10 +287,12 @@ class KillfeedApp(ctk.CTk):
         self.title("Valorant Killfeed Editor (Ultimate)")
         self.geometry("1600x900")
         
+        self.style_vars = {}
+        self.layout_vars = {}
+        
         self.renderer = KillfeedRenderer()
         self.history, self.history_index, self.editing_index = [], -1, None
         
-        # DEFAULTS
         self.default_settings = {
             'width': 500, 'height': 36, 
             'border_width': 2, 'border_angle': 180,
@@ -280,17 +302,43 @@ class KillfeedApp(ctk.CTk):
             'dash_color': (142, 0, 231),
             'att_color': (255, 255, 255), 'vic_color': (255, 255, 255), 'icon_color': (255, 255, 255),
             'glow_enabled': True, 'glow_color': (130, 0, 220), 'glow_intensity': 2,
-            # LAYOUT DEFAULTS
+            'font_path': DEFAULT_FONT_PATH,
             'att_align': 'Left', 'att_offset_x': 8, 'att_offset_y': -4,
             'vic_align': 'Center', 'vic_offset_x': 0, 'vic_offset_y': -4,
-            'center_offset': -100, 'mod_spacing': 2
+            'center_offset': -100, 'mod_spacing': 2,
+            'row_spacing': 2,
+            'export_bg_mode': 'Transparent', 
+            'export_bg_color': (0, 0, 0)
         }
         self.settings = copy.deepcopy(self.default_settings)
         self.export_scale = ctk.IntVar(value=1)
         self.data = [{'type':'kill', 'att_name':'hekli', 'att_agent':'Cypher', 'weapon':'Vandal', 'mods':['Headshot'], 'vic_name':'victim', 'vic_agent':'Jett', 'multikill':1}]
+        
+        self.system_fonts = {}
+        self.scan_system_fonts()
+        
         self.save_state()
         self.build_ui()
         self.update_preview()
+
+    def scan_system_fonts(self):
+        search_paths = []
+        if sys.platform == "win32":
+            search_paths.append(os.path.join(os.environ["WINDIR"], "Fonts"))
+        elif sys.platform == "darwin":
+            search_paths.append("/Library/Fonts")
+            search_paths.append("/System/Library/Fonts")
+            search_paths.append(os.path.expanduser("~/Library/Fonts"))
+        else:
+            search_paths.append("/usr/share/fonts")
+            search_paths.append(os.path.expanduser("~/.fonts"))
+            
+        for folder in search_paths:
+            if os.path.exists(folder):
+                for root, dirs, files in os.walk(folder):
+                    for file in files:
+                        if file.lower().endswith((".ttf", ".otf")):
+                            self.system_fonts[file] = os.path.join(root, file)
 
     def save_state(self):
         if self.history_index < len(self.history) - 1: self.history = self.history[:self.history_index+1]
@@ -366,7 +414,26 @@ class KillfeedApp(ctk.CTk):
                 if current in opt.lower():
                     widget.set(opt)
                     return "break"
-        widget._entry.bind("<Tab>", on_tab)
+        try: widget._entry.bind("<Tab>", on_tab)
+        except: pass
+
+    def on_font_scroll(self, event):
+        values = self.cmb_font.cget("values")
+        if not values: return
+        
+        try: curr_idx = values.index(self.cmb_font.get())
+        except: curr_idx = 0
+        
+        # Scroll logic
+        if event.num == 5 or event.delta < 0:
+            new_idx = min(len(values) - 1, curr_idx + 1)
+        else:
+            new_idx = max(0, curr_idx - 1)
+            
+        if new_idx != curr_idx:
+            val = values[new_idx]
+            self.cmb_font.set(val)
+            self.on_font_select(val)
 
     def build_style(self, p):
         sf = ctk.CTkScrollableFrame(p, fg_color="transparent"); sf.pack(fill="both", expand=True)
@@ -387,22 +454,28 @@ class KillfeedApp(ctk.CTk):
             def on_s(v): self.settings[key]=int(v); var.set(str(int(v))); self.update_preview()
             sl = ctk.CTkSlider(f, from_=mn, to=mx, command=on_s, height=16); sl.set(self.settings[key]); sl.pack(side="left", fill="x", expand=True)
             self.style_vars[key] = (var, sl)
+        
         def add_col(lbl, key):
             f = ctk.CTkFrame(sf, fg_color="transparent"); f.pack(fill="x", pady=2)
             ctk.CTkLabel(f, text=lbl, width=80, anchor="w").pack(side="left")
             btn = ctk.CTkButton(f, text="", width=40, height=20, fg_color=rgb_to_hex(self.settings[key]))
             def pick():
-                c = colorchooser.askcolor(color=rgb_to_hex(self.settings[key]))[1]
-                if c: 
-                    # Force integers immediately
-                    c_rgb = hex_to_rgb(c) 
-                    self.settings[key] = c_rgb
-                    btn.configure(fg_color=c)
-                    self.update_preview()
+                def update_from_picker(c):
+                    if c:
+                        if isinstance(c, str):
+                            self.settings[key] = hex_to_rgb(c)
+                            btn.configure(fg_color=c)
+                        elif isinstance(c, tuple):
+                            self.settings[key] = tuple(int(x) for x in c[:3])
+                            btn.configure(fg_color=rgb_to_hex(self.settings[key]))
+                        self.update_preview()
+                if HAS_MODERN_PICKER: AskColor(color=rgb_to_hex(self.settings[key]), command=update_from_picker)
+                else:
+                    c = colorchooser.askcolor(color=rgb_to_hex(self.settings[key]))[1]
+                    update_from_picker(c)
             btn.configure(command=pick); btn.pack(side="left"); self.style_vars[key] = btn
         
         ctk.CTkLabel(sf, text="Dim/BG", text_color="gray").pack(anchor="w"); add_ctrl("Width", 'width', 300, 800); add_ctrl("Height", 'height', 20, 60); add_ctrl("Opacity", 'bg_opacity', 0, 100); add_col("BG Col", 'bg_color')
-        
         ctk.CTkLabel(sf, text="Custom Image Settings", text_color="gray", font=("Arial", 11)).pack(anchor="w", pady=(5,0))
         add_ctrl("Scale", 'bg_scale', 10, 200)
         add_ctrl("Padding", 'bg_padding', 0, 50)
@@ -412,13 +485,51 @@ class KillfeedApp(ctk.CTk):
         ctk.CTkButton(ip, text="Select Img", width=80, command=self.pick_bg).pack(side="left")
         ctk.CTkButton(ip, text="Clear", width=50, fg_color="#b91c1c", command=self.clear_bg).pack(side="left", padx=5)
 
+        # Font Settings
+        ctk.CTkLabel(sf, text="Font Settings", text_color="gray", font=("Arial", 11)).pack(anchor="w", pady=(5,0))
+        f_sel = ctk.CTkFrame(sf, fg_color="transparent"); f_sel.pack(fill="x", pady=2)
+        sorted_fonts = sorted(self.system_fonts.keys())
+        self.cmb_font = ctk.CTkComboBox(f_sel, values=sorted_fonts, command=self.on_font_select)
+        self.cmb_font.pack(side="left", fill="x", expand=True)
+        
+        # Bind Scrolling
+        self.cmb_font.bind("<MouseWheel>", self.on_font_scroll)
+        self.cmb_font.bind("<Button-4>", self.on_font_scroll)
+        self.cmb_font.bind("<Button-5>", self.on_font_scroll)
+        
+        fp = ctk.CTkFrame(sf, fg_color="transparent"); fp.pack(fill="x")
+        ctk.CTkButton(fp, text="Browse...", width=80, command=self.pick_font).pack(side="left")
+        ctk.CTkButton(fp, text="Reset", width=50, fg_color="#b91c1c", command=self.reset_font).pack(side="left", padx=5)
+
         ctk.CTkLabel(sf, text="Glow", text_color="gray").pack(anchor="w"); add_ctrl("Intens.", 'glow_intensity', 0, 60); add_col("Color", 'glow_color')
         ctk.CTkLabel(sf, text="Borders", text_color="gray").pack(anchor="w"); add_col("Start", 'border_start'); add_col("End", 'border_end'); add_col("Dash", 'dash_color')
         ctk.CTkLabel(sf, text="Text", text_color="gray").pack(anchor="w"); add_col("Attacker", 'att_color'); add_col("Victim", 'vic_color'); add_col("Icon", 'icon_color')
 
+        ctk.CTkLabel(sf, text="EXPORT SETTINGS", text_color="#a855f7", font=("Arial", 12, "bold")).pack(anchor="w", pady=(15,0))
+        bg_modes = ["Transparent", "Solid Color", "Match Gradient"]
+        self.opt_bg_mode = ctk.CTkOptionMenu(sf, values=bg_modes, command=lambda v: self.set_val('export_bg_mode', v))
+        self.opt_bg_mode.set(self.settings['export_bg_mode'])
+        self.opt_bg_mode.pack(fill="x", pady=2)
+        self.btn_bg_col = ctk.CTkButton(sf, text="Set Background Color", fg_color=rgb_to_hex(self.settings['export_bg_color']))
+        def pick_ex_bg():
+            def upd(c):
+                if c:
+                    if isinstance(c, str): 
+                        self.settings['export_bg_color'] = hex_to_rgb(c)
+                        self.btn_bg_col.configure(fg_color=c)
+                    elif isinstance(c, tuple):
+                        self.settings['export_bg_color'] = tuple(int(x) for x in c[:3])
+                        self.btn_bg_col.configure(fg_color=rgb_to_hex(self.settings['export_bg_color']))
+                    self.update_preview()
+            if HAS_MODERN_PICKER: AskColor(color=rgb_to_hex(self.settings['export_bg_color']), command=upd)
+            else: upd(colorchooser.askcolor(color=rgb_to_hex(self.settings['export_bg_color']))[1])
+        self.btn_bg_col.configure(command=pick_ex_bg)
+        self.btn_bg_col.pack(fill="x", pady=2)
+        self.style_vars['export_bg_color'] = self.btn_bg_col
+        self.layout_vars['export_bg_mode'] = self.opt_bg_mode
+
     def build_layout(self, p):
         sf = ctk.CTkScrollableFrame(p, fg_color="transparent"); sf.pack(fill="both", expand=True)
-        self.layout_vars = {}
         def add_l(parent, lbl, key, mn, mx):
             f = ctk.CTkFrame(parent, fg_color="transparent"); f.pack(fill="x", pady=2)
             ctk.CTkLabel(f, text=lbl, width=80, anchor="w").pack(side="left")
@@ -452,6 +563,7 @@ class KillfeedApp(ctk.CTk):
         ctk.CTkLabel(g3, text="GENERAL SPACING", text_color="#a855f7", font=("Arial", 12, "bold")).pack(pady=5)
         add_l(g3, "Cluster X", 'center_offset', -200, 200)
         add_l(g3, "Icon Gap", 'mod_spacing', 0, 20)
+        add_l(g3, "Row Gap", 'row_spacing', 0, 50)
 
     def set_val(self, k, v): self.settings[k]=v; self.update_preview()
     
@@ -524,6 +636,22 @@ class KillfeedApp(ctk.CTk):
         f = filedialog.askopenfilename(filetypes=[("Images", "*.png;*.jpg")])
         if f: self.settings['bg_image'] = f; self.update_preview()
     def clear_bg(self): self.settings['bg_image'] = None; self.update_preview()
+
+    def pick_font(self):
+        f = filedialog.askopenfilename(filetypes=[("Font Files", "*.ttf;*.otf")])
+        if f: 
+            self.settings['font_path'] = f
+            self.update_preview()
+            
+    def on_font_select(self, font_name):
+        path = self.system_fonts.get(font_name)
+        if path:
+            self.settings['font_path'] = path
+            self.update_preview()
+
+    def reset_font(self):
+        self.settings['font_path'] = DEFAULT_FONT_PATH
+        self.update_preview()
 
     def preset(self, p):
         if p=='def': self.settings.update(self.default_settings)
