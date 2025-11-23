@@ -21,10 +21,11 @@ ctk.set_default_color_theme("dark-blue")
 # Path Setup
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSET_PATH = os.path.join(BASE_DIR, "assets", "ShooterGame")
-DEFAULT_FONT_PATH = os.path.join(BASE_DIR, "assets", "fonts", "Moonbeam.ttf")
+# UPDATED: Default font set to VetoSans-Medium.ttf in assets folder
+DEFAULT_FONT_PATH = os.path.join(BASE_DIR, "assets", "VetoSans-Medium.ttf")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
-# --- Mappings ---
+# --- Mappings (RESTORED FULL LIST TO FIX ASSET LOADING) ---
 AGENT_ICONS = {
     "Astra": "TX_Killfeed_Astra.png", "Breach": "TX_Killfeed_Breach.png", "Brimstone": "TX_Killfeed_Brimstone.png",
     "Chamber": "TX_Killfeed_Chamber.png", "Clove": "TX_Killfeed_Clove.png", "Cypher": "TX_Killfeed_Cypher.png",
@@ -91,16 +92,27 @@ class KillfeedRenderer:
 
     def get_image(self, name, folder_scan=True):
         fname = AGENT_ICONS.get(name) or WEAPON_ICONS.get(name) or name
+        # Check cache first
+        if fname in self.cache: return self.cache[fname]
+        
         path = os.path.join(ASSET_PATH, fname)
+        
+        # If direct path doesn't exist, scan subfolders
         if not os.path.exists(path) and folder_scan:
             for root, dirs, files in os.walk(os.path.join(BASE_DIR, "assets")):
-                if fname in files: path = os.path.join(root, fname); break
-        if path in self.cache: return self.cache[path]
+                if fname in files: 
+                    path = os.path.join(root, fname)
+                    break
+        
         try:
             img = Image.open(path).convert("RGBA")
-            self.cache[path] = img
+            self.cache[fname] = img
             return img
-        except: return Image.new("RGBA", (10,10), (0,0,0,0))
+        except: 
+            # Cache failure to avoid re-scanning
+            empty = Image.new("RGBA", (10,10), (0,0,0,0))
+            self.cache[fname] = empty
+            return empty
 
     def render(self, entries, global_s, scale=1.0):
         # Use row height from global settings
@@ -124,18 +136,13 @@ class KillfeedRenderer:
 
         y = safe_padding
         
-        # Font Logic
-        font_path = global_s.get('font_path', DEFAULT_FONT_PATH)
+        # Font Logic - Always use DEFAULT_FONT_PATH since customization is removed
+        font_path = DEFAULT_FONT_PATH
         base_size = global_s.get('font_size', 22)
         font = self.get_font(font_path, int(base_size * scale))
         
         for entry in entries:
-            # Check for per-row override
             row_settings = global_s
-            if entry.get('override_style', False):
-                # Merge override settings on top of global
-                row_settings = global_s.copy()
-                row_settings.update(entry.get('style', {}))
                 
             row_img = self.render_row(entry, row_settings, scale, font, safe_padding)
             x = (canvas_w - row_img.width) // 2
@@ -158,7 +165,7 @@ class KillfeedRenderer:
         bx, by = padding, padding
         
         # 1. Glow
-        if s['glow_enabled']:
+        if s['glow_intensity'] > 0: # Only draw glow if intensity > 0
             intensity = s['glow_intensity'] * scale
             glow_color = tuple(int(c) for c in s['glow_color'][:3])
             la = Image.new('RGBA', (c_w, c_h), (0,0,0,0))
@@ -215,7 +222,7 @@ class KillfeedRenderer:
         else:
             icon_w, icon_h = int(56 * scale), int(28 * scale)
             
-            # ICONS (Frozen)
+            # ICONS
             att_icon = self.get_image(entry['att_agent']).resize((icon_w, icon_h), Image.Resampling.NEAREST)
             content.paste(att_icon, (0, cy - (icon_h // 2)), att_icon)
             
@@ -265,9 +272,6 @@ class KillfeedRenderer:
             aw, ah = ab[2]-ab[0], ab[3]-ab[1]
             vw, vh = vb[2]-vb[0], vb[3]-vb[1]
             
-            # Vertical Centering logic (Same for both)
-            # Default is center of height (cy) minus half text height.
-            # Offsets allow manual tweaking.
             ay_off = int(s.get('att_offset_y', -4) * scale)
             vy_off = int(s.get('vic_offset_y', -4) * scale)
             
@@ -320,26 +324,29 @@ class KillfeedApp(ctk.CTk):
         self.renderer = KillfeedRenderer()
         self.history, self.history_index, self.editing_index = [], -1, None
         
-        # DEFAULTS
+        # UPDATED DEFAULTS
         self.default_settings = {
-            'width': 500, 'height': 36, 
+            'width': 430, 'height': 32, # Updated Size
             'border_width': 2, 'border_angle': 180,
             'border_start': (142, 0, 231), 'border_end': (66, 0, 103),
             'bg_color': (0, 0, 0), 'bg_opacity': 90,
-            'bg_image': None, 'bg_scale': 100, 'bg_pos_x': 50, 'bg_pos_y': 50, 'bg_padding': 0,
+            # Custom Image Settings
+            'bg_image': None, 'bg_scale': 143, 'bg_pos_x': 37, 'bg_pos_y': 100, 'bg_padding': 0,
             'dash_color': (142, 0, 231),
             'att_color': (255, 255, 255), 'vic_color': (255, 255, 255), 'icon_color': (255, 255, 255),
-            'glow_enabled': True, 'glow_color': (130, 0, 220), 'glow_intensity': 2,
+            # Updated Glow
+            'glow_enabled': True, 'glow_color': (130, 0, 220), 'glow_intensity': 0,
             'font_path': DEFAULT_FONT_PATH, 'font_size': 22,
-            'att_align': 'Left', 'att_offset_x': 8, 'att_offset_y': -4,
-            'vic_align': 'Center', 'vic_offset_x': 0, 'vic_offset_y': -4,
-            'center_offset': -100, 'mod_spacing': 2,
-            'row_spacing': 2,
+            # Updated Offsets
+            'att_align': 'Left', 'att_offset_x': 8, 'att_offset_y': -2,
+            'vic_align': 'Center', 'vic_offset_x': 0, 'vic_offset_y': -2,
+            'center_offset': -55, 'mod_spacing': -3,
+            'row_spacing': -3,
             'export_bg_mode': 'Transparent', 
             'export_bg_color': (0, 0, 0)
         }
         self.settings = copy.deepcopy(self.default_settings)
-        self.export_scale = ctk.IntVar(value=1)
+        self.export_scale = ctk.IntVar(value=4) # Default to 4x
         self.data = []
         
         # Load Config
@@ -347,33 +354,11 @@ class KillfeedApp(ctk.CTk):
         if not self.data:
              self.data = [{'type':'kill', 'att_name':'hekli', 'att_agent':'Cypher', 'weapon':'Vandal', 'mods':['Headshot'], 'vic_name':'victim', 'vic_agent':'Jett', 'multikill':1}]
 
-        self.system_fonts = {}
-        self.scan_system_fonts()
-        
         self.save_state()
         self.build_ui()
         self.update_preview()
         
         self.protocol("WM_DELETE_WINDOW", self.on_close)
-
-    def scan_system_fonts(self):
-        search_paths = []
-        if sys.platform == "win32":
-            search_paths.append(os.path.join(os.environ["WINDIR"], "Fonts"))
-        elif sys.platform == "darwin":
-            search_paths.append("/Library/Fonts")
-            search_paths.append("/System/Library/Fonts")
-            search_paths.append(os.path.expanduser("~/Library/Fonts"))
-        else:
-            search_paths.append("/usr/share/fonts")
-            search_paths.append(os.path.expanduser("~/.fonts"))
-            
-        for folder in search_paths:
-            if os.path.exists(folder):
-                for root, dirs, files in os.walk(folder):
-                    for file in files:
-                        if file.lower().endswith((".ttf", ".otf")):
-                            self.system_fonts[file] = os.path.join(root, file)
 
     def on_close(self):
         self.save_to_config()
@@ -454,15 +439,7 @@ class KillfeedApp(ctk.CTk):
         self.cmb_vic = ctk.CTkComboBox(p, values=sorted(AGENT_ICONS.keys())); self.cmb_vic.set("Jett"); self.cmb_vic.pack(fill="x", pady=2)
         self.setup_autocomplete(self.cmb_vic, AGENT_ICONS)
 
-        # Override Checkbox
-        self.chk_override = ctk.CTkCheckBox(p, text="Override Style (Enable Individual Edit)", command=self.toggle_override)
-        self.chk_override.pack(pady=5)
-        
-        # Per-Row Style Controls (Hidden by default)
-        self.f_override = ctk.CTkFrame(p); 
-        # Add some mini controls for per-row edit
-        self.btn_row_bg = ctk.CTkButton(self.f_override, text="Set Row BG", width=80, command=lambda: self.pick_row_color('bg_color'))
-        self.btn_row_bg.pack(side="left", padx=2)
+        # REMOVED: Override Checkbox code entirely as requested
         
         f_btn = ctk.CTkFrame(p, fg_color="transparent"); f_btn.pack(fill="x", pady=10)
         self.btn_add = ctk.CTkButton(f_btn, text="Add New Kill", fg_color="#059669", command=self.add_kill); self.btn_add.pack(fill="x", pady=2)
@@ -474,18 +451,6 @@ class KillfeedApp(ctk.CTk):
         ctk.CTkButton(p, text="+ Add Separator", fg_color="#475569", command=self.add_sep).pack(fill="x", pady=2)
         self.list_frame = ctk.CTkScrollableFrame(p, height=200); self.list_frame.pack(fill="both", expand=True, pady=5)
 
-    def toggle_override(self):
-        if self.chk_override.get():
-            self.f_override.pack(fill="x", pady=2)
-        else:
-            self.f_override.pack_forget()
-
-    def pick_row_color(self, key):
-        # Simple helper to set a style key on the currently editing row's temp data
-        # For full implementation we'd need a whole parallel UI. 
-        # Simplified: just saves current global settings as the override when updated.
-        pass 
-
     def setup_autocomplete(self, widget, data_source):
         def on_tab(event):
             current = widget.get().lower()
@@ -496,18 +461,6 @@ class KillfeedApp(ctk.CTk):
                     return "break"
         try: widget._entry.bind("<Tab>", on_tab)
         except: pass
-
-    def on_font_scroll(self, event):
-        values = self.cmb_font.cget("values")
-        if not values: return
-        try: curr_idx = values.index(self.cmb_font.get())
-        except: curr_idx = 0
-        if event.num == 5 or event.delta < 0: new_idx = min(len(values) - 1, curr_idx + 1)
-        else: new_idx = max(0, curr_idx - 1)
-        if new_idx != curr_idx:
-            val = values[new_idx]
-            self.cmb_font.set(val)
-            self.on_font_select(val)
 
     def build_style(self, p):
         sf = ctk.CTkScrollableFrame(p, fg_color="transparent"); sf.pack(fill="both", expand=True)
@@ -560,22 +513,7 @@ class KillfeedApp(ctk.CTk):
         ctk.CTkButton(ip, text="Select Img", width=80, command=self.pick_bg).pack(side="left")
         ctk.CTkButton(ip, text="Clear", width=50, fg_color="#b91c1c", command=self.clear_bg).pack(side="left", padx=5)
 
-        # Font Settings
-        ctk.CTkLabel(sf, text="Font Settings", text_color="gray", font=("Arial", 11)).pack(anchor="w", pady=(5,0))
-        f_sel = ctk.CTkFrame(sf, fg_color="transparent"); f_sel.pack(fill="x", pady=2)
-        
-        add_ctrl("Size", 'font_size', 10, 40) # NEW FONT SIZE SLIDER
-        
-        sorted_fonts = sorted(self.system_fonts.keys())
-        self.cmb_font = ctk.CTkComboBox(f_sel, values=sorted_fonts, command=self.on_font_select)
-        self.cmb_font.pack(side="left", fill="x", expand=True)
-        self.cmb_font.bind("<MouseWheel>", self.on_font_scroll)
-        self.cmb_font.bind("<Button-4>", self.on_font_scroll)
-        self.cmb_font.bind("<Button-5>", self.on_font_scroll)
-        
-        fp = ctk.CTkFrame(sf, fg_color="transparent"); fp.pack(fill="x")
-        ctk.CTkButton(fp, text="Browse...", width=80, command=self.pick_font).pack(side="left")
-        ctk.CTkButton(fp, text="Reset", width=50, fg_color="#b91c1c", command=self.reset_font).pack(side="left", padx=5)
+        # FONT SETTINGS REMOVED
 
         ctk.CTkLabel(sf, text="Glow", text_color="gray").pack(anchor="w"); add_ctrl("Intens.", 'glow_intensity', 0, 60); add_col("Color", 'glow_color')
         ctk.CTkLabel(sf, text="Borders", text_color="gray").pack(anchor="w"); add_col("Start", 'border_start'); add_col("End", 'border_end'); add_col("Dash", 'dash_color')
@@ -640,8 +578,8 @@ class KillfeedApp(ctk.CTk):
         g3 = ctk.CTkFrame(sf); g3.pack(fill="x", pady=5, padx=5)
         ctk.CTkLabel(g3, text="GENERAL SPACING", text_color="#a855f7", font=("Arial", 12, "bold")).pack(pady=5)
         add_l(g3, "Cluster X", 'center_offset', -200, 200)
-        add_l(g3, "Icon Gap", 'mod_spacing', 0, 20)
-        add_l(g3, "Row Gap", 'row_spacing', 0, 50)
+        add_l(g3, "Icon Gap", 'mod_spacing', -10, 20)
+        add_l(g3, "Row Gap", 'row_spacing', -10, 50)
 
     def set_val(self, k, v): self.settings[k]=v; self.update_preview()
     
@@ -655,16 +593,8 @@ class KillfeedApp(ctk.CTk):
             'att_name':self.ent_att.get(), 'att_agent':self.cmb_att.get(), 
             'weapon':self.cmb_wep.get(), 'mods':mods, 
             'vic_name':self.ent_vic.get(), 'vic_agent':self.cmb_vic.get(), 
-            'multikill':int(self.opt_mk.get()),
-            'override_style': self.chk_override.get(),
-            'style': {} # In a full implementation, this would capture per-row style diffs
+            'multikill':int(self.opt_mk.get())
         }
-        # Simple snapshot of current style if override is checked
-        if self.chk_override.get():
-            # For now, this just snapshots CURRENT global settings as the row specific settings
-            # To be editable per row, you'd need to load these back into the UI
-            data['style'] = copy.deepcopy(self.settings)
-            
         return data
 
     def add_kill(self):
@@ -684,8 +614,6 @@ class KillfeedApp(ctk.CTk):
         self.editing_index = None
         self.btn_upd.configure(state="disabled")
         self.btn_cancel.configure(state="disabled")
-        self.chk_override.deselect()
-        self.f_override.pack_forget()
         self.refresh_list_ui()
 
     def edit_entry(self, i):
@@ -704,14 +632,6 @@ class KillfeedApp(ctk.CTk):
             self.chk_hs.deselect(); self.chk_wb.deselect()
             if 'Headshot' in e['mods']: self.chk_hs.select()
             if 'Wallbang' in e['mods']: self.chk_wb.select()
-            
-            if e.get('override_style'):
-                self.chk_override.select()
-                self.f_override.pack(fill="x", pady=2)
-                # Note: A full implementation would update style sliders here to reflect the row's style
-            else:
-                self.chk_override.deselect()
-                self.f_override.pack_forget()
 
     def add_sep(self): self.save_state(); self.data.append({'type':'sep', 'text':self.ent_sep.get()}); self.refresh_list_ui(); self.update_preview()
     
@@ -721,7 +641,6 @@ class KillfeedApp(ctk.CTk):
             c = "#3b82f6" if i == self.editing_index else "#334155"
             f = ctk.CTkFrame(self.list_frame, fg_color=c); f.pack(fill="x", pady=1)
             txt = e['text'] if e['type']=='sep' else f"{e['att_name']} -> {e['vic_name']} ({e.get('multikill',1)}x)"
-            if e.get('override_style'): txt += " [STYLE]"
             ctk.CTkButton(f, text=txt, fg_color="transparent", anchor="w", command=lambda x=i: self.edit_entry(x)).pack(side="left", fill="x", expand=True)
             ctk.CTkButton(f, text="X", width=30, fg_color="red", command=lambda x=i: self.rem(x)).pack(side="right", padx=2)
 
@@ -736,21 +655,7 @@ class KillfeedApp(ctk.CTk):
         if f: self.settings['bg_image'] = f; self.update_preview()
     def clear_bg(self): self.settings['bg_image'] = None; self.update_preview()
 
-    def pick_font(self):
-        f = filedialog.askopenfilename(filetypes=[("Font Files", "*.ttf;*.otf")])
-        if f: 
-            self.settings['font_path'] = f
-            self.update_preview()
-            
-    def on_font_select(self, font_name):
-        path = self.system_fonts.get(font_name)
-        if path:
-            self.settings['font_path'] = path
-            self.update_preview()
-
-    def reset_font(self):
-        self.settings['font_path'] = DEFAULT_FONT_PATH
-        self.update_preview()
+    # REMOVED: pick_font, on_font_select, reset_font
 
     def preset(self, p):
         if p=='def': self.settings.update(self.default_settings)
