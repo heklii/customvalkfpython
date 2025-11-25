@@ -660,7 +660,8 @@ class KillfeedApp(ctk.CTk):
     def preset(self, p):
         if p=='def': self.settings.update(self.default_settings)
         elif p=='ally': self.settings.update({'border_start':(0,255,255), 'border_end':(0,128,128), 'dash_color':(0,255,255), 'glow_enabled':False})
-        elif p=='enemy': self.settings.update({'border_start':(255,70,85), 'border_end':(128,0,0), 'dash_color':(255,70,85), 'glow_enabled':False})
+        # UPDATED: Enemy preset changed to Yellow Gradient (Opposite of Purple)
+        elif p=='enemy': self.settings.update({'border_start':(255,223,0), 'border_end':(140,120,0), 'dash_color':(255,223,0), 'glow_enabled':False})
         self.refresh_all_ui(); self.update_preview()
         
     def refresh_all_ui(self):
