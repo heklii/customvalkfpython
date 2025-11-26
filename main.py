@@ -54,7 +54,7 @@ WEAPON_ICONS = {
     "Phantom": "TX_Hud_Rifles_Ghost.png",
     "Vandal": "TX_Hud_Rifles_Volcano.png", 
     "Marshal": "TX_Hud_Sniper_Bolt.png", 
-    "Operator": "TX_Hud_Sniper_Operater.png",
+    "Operator": "TX_Hud_Operator.png",
     "Outlaw": "TX_Hud_Sniper_DoubleSniper.png",
     "Ares": "TX_Hud_LMG.png", 
     "Odin": "TX_Hud_HMG.png", 
@@ -73,6 +73,7 @@ WEAPON_ICONS = {
     "Jett: Blade Storm": "TX_Wushu_Daggers.png",
     "Killjoy: Nanoswarm": "TX_KJ_Bees.png",
     "Killjoy: Turret": "tx_KJ_turret.png",
+    "Neon: Overdrive": "TX_Neon_Overdrive.png", # Added Neon Ult
     "Phoenix: Blaze": "TX_Pheonix_FireWall.png",
     "Phoenix: Hot Hands": "TX_Pheonix_Molotov.png",
     "Raze: Boom Bot": "TX_Clay_Boomba.png",
