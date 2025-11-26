@@ -21,11 +21,10 @@ ctk.set_default_color_theme("dark-blue")
 # Path Setup
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSET_PATH = os.path.join(BASE_DIR, "assets", "ShooterGame")
-# UPDATED: Default font set to VetoSans-Medium.ttf in assets folder
 DEFAULT_FONT_PATH = os.path.join(BASE_DIR, "assets", "VetoSans-Medium.ttf")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
-# --- Mappings (RESTORED FULL LIST TO FIX ASSET LOADING) ---
+# --- Mappings ---
 AGENT_ICONS = {
     "Astra": "TX_Killfeed_Astra.png", "Breach": "TX_Killfeed_Breach.png", "Brimstone": "TX_Killfeed_Brimstone.png",
     "Chamber": "TX_Killfeed_Chamber.png", "Clove": "TX_Killfeed_Clove.png", "Cypher": "TX_Killfeed_Cypher.png",
@@ -125,30 +124,24 @@ class KillfeedRenderer:
 
     def get_image(self, name, folder_scan=True):
         fname = AGENT_ICONS.get(name) or WEAPON_ICONS.get(name) or name
-        # Check cache first
         if fname in self.cache: return self.cache[fname]
         
         path = os.path.join(ASSET_PATH, fname)
-        
-        # If direct path doesn't exist, scan subfolders
         if not os.path.exists(path) and folder_scan:
             for root, dirs, files in os.walk(os.path.join(BASE_DIR, "assets")):
                 if fname in files: 
                     path = os.path.join(root, fname)
                     break
-        
         try:
             img = Image.open(path).convert("RGBA")
             self.cache[fname] = img
             return img
         except: 
-            # Cache failure to avoid re-scanning
             empty = Image.new("RGBA", (10,10), (0,0,0,0))
             self.cache[fname] = empty
             return empty
 
     def render(self, entries, global_s, scale=1.0):
-        # Use row height from global settings
         row_h = int(global_s['height'] * scale)
         spacing = int(global_s.get('row_spacing', 2) * scale)
         safe_padding = int(60 * scale)
@@ -168,22 +161,15 @@ class KillfeedRenderer:
             canvas = Image.new('RGBA', (canvas_w, total_h), (0,0,0,0))
 
         y = safe_padding
-        
-        # Font Logic - Always use DEFAULT_FONT_PATH since customization is removed
         font_path = DEFAULT_FONT_PATH
         base_size = global_s.get('font_size', 22)
         font = self.get_font(font_path, int(base_size * scale))
         
         for entry in entries:
-            row_settings = global_s
-                
-            row_img = self.render_row(entry, row_settings, scale, font, safe_padding)
+            row_img = self.render_row(entry, global_s, scale, font, safe_padding)
             x = (canvas_w - row_img.width) // 2
-            
-            if bg_mode == 'Transparent':
-                canvas.paste(row_img, (x, y), row_img)
-            else:
-                canvas.alpha_composite(row_img, (x, y))
+            if bg_mode == 'Transparent': canvas.paste(row_img, (x, y), row_img)
+            else: canvas.alpha_composite(row_img, (x, y))
             y += row_h + spacing
             
         return canvas
@@ -198,7 +184,7 @@ class KillfeedRenderer:
         bx, by = padding, padding
         
         # 1. Glow
-        if s['glow_intensity'] > 0: # Only draw glow if intensity > 0
+        if s['glow_intensity'] > 0:
             intensity = s['glow_intensity'] * scale
             glow_color = tuple(int(c) for c in s['glow_color'][:3])
             la = Image.new('RGBA', (c_w, c_h), (0,0,0,0))
@@ -246,12 +232,12 @@ class KillfeedRenderer:
         # 4. Content
         content = Image.new('RGBA', (iw, ih), (0,0,0,0))
         cd = ImageDraw.Draw(content)
-        cy = ih // 2
+        cy = ih // 2 # Vertical Center
         
         if entry['type'] == 'sep':
             txt = entry.get('text', '')
-            bbox = font.getbbox(txt)
-            cd.text(((iw-(bbox[2]-bbox[0]))//2, (ih-(bbox[3]-bbox[1]))//2 - int(4*scale)), txt, font=font, fill=(255,255,255))
+            # Center Separator Text automatically
+            cd.text((iw/2, cy), txt, font=font, fill=(255,255,255), anchor="mm")
         else:
             icon_w, icon_h = int(56 * scale), int(28 * scale)
             
@@ -274,7 +260,6 @@ class KillfeedRenderer:
                 wep_w = int(wep_h * (wep_base.width / wep_base.height))
                 wep_icon = colorize_image(ImageOps.mirror(wep_base.resize((wep_w, wep_h), Image.Resampling.NEAREST)), icon_tint)
             
-            # Fixed center point
             center_x = (iw // 2) + int(s.get('center_offset', 0) * scale)
             wep_draw_x = center_x - (wep_w // 2)
             
@@ -299,32 +284,46 @@ class KillfeedRenderer:
                 content.paste(m_img, (mx, cy - (m_h // 2)), m_img)
                 mx += m_img.width + mod_sp
             
-            # Text
-            atxt, vtxt = entry['att_name'], entry['vic_name']
-            ab, vb = font.getbbox(atxt), font.getbbox(vtxt)
-            aw, ah = ab[2]-ab[0], ab[3]-ab[1]
-            vw, vh = vb[2]-vb[0], vb[3]-vb[1]
-            
-            ay_off = int(s.get('att_offset_y', -4) * scale)
-            vy_off = int(s.get('vic_offset_y', -4) * scale)
-            
+            # TEXT with ANCHOR Positioning (Automatic Vertical Centering)
+            # Attacker
+            atxt = entry['att_name']
+            aa = s.get('att_align', 'Left')
+            ax_off = int(s.get('att_offset_x', 8) * scale)
+            ay_off = int(s.get('att_offset_y', -2) * scale)
             ac = tuple(int(c) for c in s['att_color'][:3])
+            
+            if aa == 'Left':
+                ax = icon_w + ax_off
+                anch = 'lm' # Left Middle
+            elif aa == 'Right':
+                ax = wep_draw_x - ax_off
+                anch = 'rm' # Right Middle
+            else:
+                ax = icon_w + ((wep_draw_x - icon_w)//2) + ax_off
+                anch = 'mm' # Middle Middle
+            
+            cd.text((ax, cy + ay_off), atxt, font=font, fill=ac, anchor=anch)
+            
+            # Victim
+            vtxt = entry['vic_name']
+            va = s.get('vic_align', 'Center')
+            vx_off = int(s.get('vic_offset_x', 0) * scale)
+            vy_off = int(s.get('vic_offset_y', -2) * scale)
             vc = tuple(int(c) for c in s['vic_color'][:3])
             
-            # Attacker Text
-            aa, ax_off = s.get('att_align', 'Left'), int(s.get('att_offset_x', 8) * scale)
-            if aa == 'Right': ax = wep_draw_x - aw - ax_off
-            elif aa == 'Left': ax = icon_w + ax_off
-            else: ax = icon_w + ((wep_draw_x - icon_w)//2) - (aw//2) + ax_off
-            cd.text((ax, cy - (ah//2) + ay_off), atxt, font=font, fill=ac)
-            
-            # Victim Text
             cluster_right_edge = mx
-            va, vx_off = s.get('vic_align', 'Center'), int(s.get('vic_offset_x', 0) * scale)
-            if va == 'Left': vx = cluster_right_edge + vx_off
-            elif va == 'Right': vx = (iw - icon_w) - vw - vx_off
-            else: vx = cluster_right_edge + (((iw - icon_w) - cluster_right_edge)//2) - (vw//2) + vx_off
-            cd.text((vx, cy - (vh//2) + vy_off), vtxt, font=font, fill=vc)
+            
+            if va == 'Left':
+                vx = cluster_right_edge + vx_off
+                anch = 'lm'
+            elif va == 'Right':
+                vx = (iw - icon_w) - vx_off
+                anch = 'rm'
+            else:
+                vx = cluster_right_edge + (((iw - icon_w) - cluster_right_edge)//2) + vx_off
+                anch = 'mm'
+                
+            cd.text((vx, cy + vy_off), vtxt, font=font, fill=vc, anchor=anch)
 
         container.paste(content, (bx+bw, by+bw), content)
         
@@ -357,20 +356,17 @@ class KillfeedApp(ctk.CTk):
         self.renderer = KillfeedRenderer()
         self.history, self.history_index, self.editing_index = [], -1, None
         
-        # UPDATED DEFAULTS
+        # DEFAULTS
         self.default_settings = {
-            'width': 430, 'height': 32, # Updated Size
+            'width': 430, 'height': 32,
             'border_width': 2, 'border_angle': 180,
             'border_start': (142, 0, 231), 'border_end': (66, 0, 103),
             'bg_color': (0, 0, 0), 'bg_opacity': 90,
-            # Custom Image Settings
             'bg_image': None, 'bg_scale': 143, 'bg_pos_x': 37, 'bg_pos_y': 100, 'bg_padding': 0,
             'dash_color': (142, 0, 231),
             'att_color': (255, 255, 255), 'vic_color': (255, 255, 255), 'icon_color': (255, 255, 255),
-            # Updated Glow
             'glow_enabled': True, 'glow_color': (130, 0, 220), 'glow_intensity': 0,
             'font_path': DEFAULT_FONT_PATH, 'font_size': 22,
-            # Updated Offsets
             'att_align': 'Left', 'att_offset_x': 8, 'att_offset_y': -2,
             'vic_align': 'Center', 'vic_offset_x': 0, 'vic_offset_y': -2,
             'center_offset': -55, 'mod_spacing': -3,
@@ -379,7 +375,7 @@ class KillfeedApp(ctk.CTk):
             'export_bg_color': (0, 0, 0)
         }
         self.settings = copy.deepcopy(self.default_settings)
-        self.export_scale = ctk.IntVar(value=4) # Default to 4x
+        self.export_scale = ctk.IntVar(value=4)
         self.data = []
         
         # Load Config
@@ -472,8 +468,6 @@ class KillfeedApp(ctk.CTk):
         self.cmb_vic = ctk.CTkComboBox(p, values=sorted(AGENT_ICONS.keys())); self.cmb_vic.set("Jett"); self.cmb_vic.pack(fill="x", pady=2)
         self.setup_autocomplete(self.cmb_vic, AGENT_ICONS)
 
-        # REMOVED: Override Checkbox code entirely as requested
-        
         f_btn = ctk.CTkFrame(p, fg_color="transparent"); f_btn.pack(fill="x", pady=10)
         self.btn_add = ctk.CTkButton(f_btn, text="Add New Kill", fg_color="#059669", command=self.add_kill); self.btn_add.pack(fill="x", pady=2)
         f_upd = ctk.CTkFrame(p, fg_color="transparent"); f_upd.pack(fill="x")
@@ -545,8 +539,6 @@ class KillfeedApp(ctk.CTk):
         ip = ctk.CTkFrame(sf, fg_color="transparent"); ip.pack(fill="x")
         ctk.CTkButton(ip, text="Select Img", width=80, command=self.pick_bg).pack(side="left")
         ctk.CTkButton(ip, text="Clear", width=50, fg_color="#b91c1c", command=self.clear_bg).pack(side="left", padx=5)
-
-        # FONT SETTINGS REMOVED
 
         ctk.CTkLabel(sf, text="Glow", text_color="gray").pack(anchor="w"); add_ctrl("Intens.", 'glow_intensity', 0, 60); add_col("Color", 'glow_color')
         ctk.CTkLabel(sf, text="Borders", text_color="gray").pack(anchor="w"); add_col("Start", 'border_start'); add_col("End", 'border_end'); add_col("Dash", 'dash_color')
@@ -688,12 +680,9 @@ class KillfeedApp(ctk.CTk):
         if f: self.settings['bg_image'] = f; self.update_preview()
     def clear_bg(self): self.settings['bg_image'] = None; self.update_preview()
 
-    # REMOVED: pick_font, on_font_select, reset_font
-
     def preset(self, p):
         if p=='def': self.settings.update(self.default_settings)
         elif p=='ally': self.settings.update({'border_start':(0,255,255), 'border_end':(0,128,128), 'dash_color':(0,255,255), 'glow_enabled':False})
-        # UPDATED: Enemy preset changed to Yellow Gradient (Opposite of Purple)
         elif p=='enemy': self.settings.update({'border_start':(255,223,0), 'border_end':(140,120,0), 'dash_color':(255,223,0), 'glow_enabled':False})
         self.refresh_all_ui(); self.update_preview()
         
